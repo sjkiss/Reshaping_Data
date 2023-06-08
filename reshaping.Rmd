@@ -1,0 +1,349 @@
+---
+title: "Reshaping Data"
+author: "Simon J. Kiss"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: yes
+    toc_float: yes
+---
+<style>
+p.caption {
+  font-style: italic
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=F, message=F)
+```
+
+## Wide Versus Long Data
+
+It's a csv file which is pretty straightforward to read.  But there are three problems: 
+
+1. There is a bunch of junk above the actual numbers we don't want. 
+2. there is an annoying row with `Percent` stuck below the headers 
+3. There is a bunch of junk below the actual numbers we don't want. 
+
+All of these problems can be dealth with using the `skip` and the `n_max` functions. 
+
+Because we can see easily that the columns in this case run from 2017 to 2021, maybe we can skip importing the headers and that `percentage` row and we'll just make our own names. That will solvce problem 1 and 2. And if we look down at the end, maybe we want to stop at the `Unclassified` row. It looks like there are just missing data anyway. So let's just import rows 15 to 42.
+
+Note, we will need the following libraries for the code to follow. Run this code to install these packages if they are not already installed.
+
+```{r install-if-necessary, eval=F}
+install.packages("tidyverse")
+install.packages("haven")
+install.packages("here")
+install.packages("knitr")
+```
+
+Once installed, they can be loaded with this code.
+```{r load-libraries}
+library(haven)
+library(tidyverse)
+library(here)
+library(knitr)
+```
+
+```{r import-data}
+
+unemployment<-read.csv(here("data/1410002301-eng.csv"), skip=14, nrows=42-15, header=F)
+```
+
+Let's take a look:
+
+```{r view, eval=F}
+View(unemployment)
+```
+
+```{r image1, echo=F}
+include_graphics(here("images/unemployment.png"))
+```
+
+So that worked well. Note that in the column there are some junky numbers at the end of the name of each sector. This would require a manipulation which we can talk about next class. For now we will leave it. 
+
+Let's take another look with `glimpse()`
+
+```{r glimpse-unemp}
+glimpse(unemployment)
+```
+
+The variable names here are not very helpful and there are two columns filled with missing values. So we need to assign some names to these columns and we need to drop the last two columns which somehow got imported even though they are not necessary. 
+
+If you remember from last class, when we use the `select()` command we can also rename the variables we are selecting. So why don't we just select the first five columns, renaming each column?
+
+
+
+```{r select-rename}
+unemployment %>% 
+  select(Sector=1, `2017`=2, `2018`=3, `2019`=4, `2020`=5)->unemployment
+unemployment
+```
+
+## Pivot Wide Data To Long
+
+This is classically wide data and it is *great* for presenting information for tables, primarily because, in English, we read information from left to right. But for other purposes, it is not great. Another way to think about this is is that 2017 is not really a variable. `Year` is the variable and in the time we observe the unemployment rate, the variable of `year` takes on another value. So those years should be in one column and the unemployment *rate* should be in a separate column.
+
+So we need to `pivot` the columns from 2017 to 2020 to make two new columns: a `Year` column and an `Unemployment Rate` column.  In order to do this we need to specify *which columns we want to pivot down*. 
+
+
+```{r pivot-longer}
+unemployment %>% 
+  pivot_longer(., cols=`2017`:`2020`)
+
+```
+
+If you remember back in the selection on `select()` there are a bunch of helpers we can use to pick and choose the columns we want to pivot. Sometimes they are out of order; sometimes the names are long and messy;  Sometimes they have a common prefix.  So, here, we can also select by position. We want the 2 through 5th columns. 
+```{r pivot-longer-select}
+unemployment %>% 
+  pivot_longer(., cols=2:5)
+
+```
+Notice that the two new columns don't have really helpful names.  By default, `pivot_longer()` names the two new columns `variable` and `value`. But we can change these to suit our purposes. Here we use the `names_to` and the `values_to` argument. So one column will contain the *names* of the pivoted columns and one column will contain the *values*. 
+
+```{r pivot-with-names}
+unemployment %>% 
+  pivot_longer(., cols=`2017`:`2020`, names_to=c("Year"), values_to=c("Unemployment Rate"))->unemployment
+head(unemployment)
+```
+
+Notice we have here a perfectly tidy data frame ready for graphing. The x can be the year, the y can be the rate and the color of the line could be the sector. 
+
+```{r unemployment-plot,fig.width=10, fig.height=3}
+unemployment %>% 
+  ggplot(., aes(x=Year, y=`Unemployment Rate`, col=Sector, group=Sector))+geom_line()
+```
+
+Obviously we would want to make it more readable, but that will come in the next few classes.
+
+### Example 2
+
+Sometimes, even when data is properly `tidy` in that every variable is in a column, we still want to pivot it longer in order to facilitate visualazation. The reason is the entire philosophy of `ggplot2` is to link any graphical element that varies with information to **one** column. 
+
+An example is this dataset that contains the immunization coverage rates for DTP and MMR in Toronto schools [here](https://open.toronto.ca/dataset/immunization-coverage-for-students/).
+
+The data are stored in the file: `immunication-coverage-2017-2018.csv` in the `data` subfolder.
+
+```{r import2}
+immunization<-read.csv(file=here("data/immunization-coverage-2017-2018.csv"))
+```
+
+```{r glimpse-immunization}
+glimpse(immunization)
+```
+
+Let's clean the names of the data-set.
+```{r load-janitor-clean-names}
+library(janitor)
+immunization<-clean_names(immunization)
+```
+Notice here we have four different columns: the DTP coverage rate, the DTP Religious Exemption Rate, the MMR coverage rate and the MMR Religious Exemption rate. 
+
+How many variables ar ethere actually in these columns?
+
+In reality, I would say there are three variables:
+
+1) The disease (DTP or MMR)
+2) The metric (the rate of coverage or the rate of exemptions)
+3) The rate itself
+
+It might make sense to compare MMR coverage with MMR exemptions for each school and then DTP Coverage with DTP Exemptions for each school. Or it might make sense to compare the coverages of both with the religious exemptions of both. We can actually do a lot of combinations here. 
+
+Turning this into a proper tidy data frame is a bit more tricky, but we can do it. 
+
+The first thing to do is to take the four columns that have the measurements into one column.  Let's call the `names_to` column `Measure` and the `values_to` column `Value`. Remember, we can `select` variables in multiple ways. 
+
+We can select by position i.e. the fourth through the seventh column (I got that literally just by counting the columns in a `View` or a `head()` call.). We'll do that, store the object and then also just show other ways to do it without saving the results. 
+```{r immunization-pivot-longer}
+
+immunization %>% 
+pivot_longer(., cols=4:7, names_to=c("Measure"), values_to=c("Value")) ->immunization_long
+
+```
+
+We could do it by specifying the names of the variables to serve as the beginning and the ending:
+
+```{r pivot-longer-names}
+
+immunization %>% 
+pivot_longer(., cols=dtp_coverage_rate:mmr_religious_exemption_rate, names_to=c("Measure"), values_to=c("Value")) 
+```
+
+We could also get really logical and pick out keywords that mark off our selections. In this case, we could say, if the variables contain `dtp` or `mmr`, then pivot them down. 
+
+```{r pivot-longer-with-contains}
+immunization %>% 
+pivot_longer(., cols=contains("mmr")|contains("dpt"), names_to=c("Measure"), values_to=c("Value")) 
+
+```
+
+
+Now let's take a look at the reshaped data.
+
+```{r viewimmunization-long, eval=F}
+View(immunization_long)
+```
+
+```{r image2, echo=F, fig.cap="A long version of the immunization dataset"}
+include_graphics(here("images/immunization_long.png"))
+```
+
+That looks good, but notice that in our new `Measure` variable there are actually *two* variables tucked in there! Disease and Coverage versus Exemption! It would be useful to separate our `Measure` variable into two: one column for disease (e.g. `dtp` versus `mmr`) and the other column that indicates whether the rate in the value column might be the coverage rate or the exemption rate.
+
+`dplyr`  offers a function called `separate()` that does just that. It's basically a version of Microsoft Excel's `text to columns` feature.
+
+```{r help-separate, eval=F}
+?separate
+```
+
+The basic syntax is `separate(data, col="columntoseparate", sep="symbol_to_separate_at", into=c("name_of_new_column" , "name_of_new_column2"))`
+
+If we look at the variable `Measure` we see that we could use the `_` to separate out the bits of information. Let's try this:
+
+```{r separate}
+immunization_long %>% 
+  separate(., col="Measure", sep="_", into=c("Disease", "Measure"))->immunization_long
+
+```
+
+We do get some warnings, but if we look at it, it basically looks pretty good. 
+
+```{r view-measure, eval=F}
+View(immunization_long)
+```
+
+```{r image3, echo=F, fig.cap="The results of separate."}
+include_graphics(path=here("images/immunization_separate.png"))
+```
+
+That looks quite good. In the real world, I would want to manipulate this to capitalize the terms and make them look nice (as we will practice next week). But for now we will just carry on. 
+
+
+Now, the beauty of this is that we can group the diseases and measurements any way we want. 
+
+```{r fig.height=20, fig.width=8}
+immunization_long %>% 
+  ggplot(., aes(x=Value, y=fct_reorder(school_name, Value), fill=Disease))+geom_col(position="dodge")+facet_grid(~Measure)
+```
+
+Obviously this is completely unreadable: but we can do a few things to show what we can do.  One is we can stop printing the school names, and turn this into an interactive plot where a reader only receives the schoool names when hovering the click over a bar. 
+
+We need the `plotly` library.
+```{r installplotly}
+#install.packages('plotly')
+library(plotly)
+```
+
+We make our graph, exactly as above: and save it in `plot1`. Then run `ggplotly` on `plot1`
+```{r fig.height=20, fig.width=8}
+
+immunization_long %>% 
+  ggplot(., aes(x=Value, y=fct_reorder2(school_name, Measure, Value, .desc=F), fill=Disease))+geom_col(position="dodge")+facet_grid(~Measure)+theme(axis.text.y=element_blank())->plot1
+ggplotly(plot1)
+```
+
+This is also not really sufficient, but what I want to show you is how we could also compare the coverage and the exemptions by putting the disease, side-by-side.
+
+```{r fig.height=20, fig.width=8}
+
+immunization_long %>% 
+  ggplot(., aes(x=Value, y=fct_reorder2(school_name, Disease, Value, .desc=F), fill=Measure))+geom_col(position="dodge")+facet_grid(~Disease)+theme(axis.text.y=element_blank())->plot2
+ggplotly(plot2)
+
+```
+
+## Long To Wide Data
+
+Sometimes however, we need to go the other way. Statistics Canada often provides data on both raw numbers and percentages and it looks like this. 
+
+```{r import3}
+unemployment_long<-read.csv(file=here("data/unemployment_long.csv.csv"))
+# Clean the names
+unemployment_long<-clean_names(unemployment_long)
+```
+
+This is a data-set of unemployment *rates* and employment *levels* (e..g the number of people employed in a sector) for 2017 to 2021 in Canada. On the one hand, the `value` column helpfully includes one 
+
+If we look at it and scroll down to the bottom you will see the problem here.
+
+```{r view-problem, eval=F}
+View(unemployment_long)
+```
+
+```{r image4, echo=F, fig.cap="A long dataset of unemployment rates in Canada."}
+include_graphics(path=here("images/unemployment_long.png"))
+```
+
+
+We need to turn this long data into wide data with one column for unemployment and one column for employment. 
+
+```{r names-unemployment-long}
+names(unemployment_long)
+```
+
+We need to specify that we want to take the names of the new column from the `labour_force_characteristics` variable and the values of the new columns have to come from the `value` column. 
+```{r pivot-wider-1}
+
+unemployment_long %>% 
+  pivot_wider(., names_from=c("labour_force_characteristics"), values_from=c("value"))->unemployment_wide
+
+```
+
+```{r view-wide, eval=F}
+View(unemployment_wide)
+```
+
+```{r problem-wide, echo=F, fig.cap="Problem with the wide dataset"}
+include_graphics(here("images/problem_with_wide.png"))
+```
+
+The problem is that the variable `labour_force_characteristics` and the variable `uom` (Unit of Measurement) are basically duplicate values. `labour_force_characteristics` has the values `Employment` which measures the number of people employed and the `Unemployment Rate` which measures the ...unemployment rate. But the other variable `uom` has exactly the same information.
+```{r show-labour-force-characteristics-uom}
+unemployment_long %>% 
+  select(labour_force_characteristics, uom) %>% 
+  slice_sample(n=20)
+```
+
+So, we end up with a variable called `Employment` and a variable called `Unemployment Rate` but there is also a variable called `UOM` and it has entries for both the new variables. 
+
+
+
+The quick and dirty fix for this is to just select the bare minimum of variables you need. In this way, we'll avoid duplication.
+
+```{r select-then-pivot-wider}
+
+unemployment_long %>% 
+  select(ref_date, labour_force_characteristics, north_american_industry_classification_system_naics, age_group, value) %>% 
+  pivot_wider(., names_from=c("labour_force_characteristics"), values_from=c("value"))->unemployment_wide
+
+```
+
+Now take a look. 
+
+
+```{r, eval=F}
+View(unemployment_wide)
+```
+
+```{r image5, echo=F, fig.cap="A wide dataset"}
+include_graphics(path=here("images/select_pivot.png"))
+```
+
+now, we could use either `Employment` or `Unemployment Rate` as a y variable depending on what we wanted.
+
+```{r employment,fig.width=10, fig.height=3}
+
+unemployment_wide %>% 
+  ggplot(., aes(x=ref_date, y=Employment, col=north_american_industry_classification_system_naics))+geom_line()
+```
+
+Or we could pick the *unemployment rate*.
+
+
+```{r unemployment,fig.width=10, fig.height=3}
+
+unemployment_wide %>% 
+  ggplot(., aes(x=ref_date, y=`Unemployment rate`, col=north_american_industry_classification_system_naics))+geom_line()
+```
+
