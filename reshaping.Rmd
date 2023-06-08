@@ -16,10 +16,48 @@ p.caption {
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning=F, message=F)
 ```
+## Introduction 
 
-## Wide Versus Long Data
+If you recall back in the very first lecture, I introduced the concept of *tidy* data where each row in a dataset is an observation and each column is a variable. Tidy data is typically *longer* than it is *wider*. 
 
-It's a csv file which is pretty straightforward to read.  But there are three problems: 
+For example, you could represent data on minimum wage by province and year like this. 
+
+
+| Province |2019| 2020 | 2021| 2022| 
+|:---------------------------| ----------------------:|:----------------------:|:----:|:-----|:--------:|:------:|
+| Alberta | 14| 15 |16|17|
+| Ontario  | 14.75| 15 |16.25 |17|
+| Quebec | 14.25| 15.5 |16 |17.5|
+
+
+This is a very common way to present and read data and it works *great* when you are presenting data in tabular form because we read from left to right. 
+
+However, to visualize complex forms of data, a tidy, or longer, structure is useful and *necessary* for using `ggplot2`. 
+
+The same dataset above looks like this when tidied.
+
+
+| Province | Year | Wage |
+|:---------------------------| ----------------------:|:----------------------:|
+| Alberta | 2019| 14 |
+|  Alberta | 2020 | 15 | 
+| Alberta | 2021 | 16 |
+|  Alberta| 2022 | 17 |
+| Ontario | 2019| 14.75 |
+|  Ontario | 2020 | 15 | 
+| Ontario | 2021 | 16.25|
+|  Ontario| 2022 | 17 |
+| Quebec | 2019|14.25 |
+|  Quebec | 2020 | 15.5 | 
+| Quebec | 2021 |16|
+|  Quebec| 2022 |17.5|
+
+We have already done some conceptual work early in the class distinguishing between observations and variables. This class is focussed more on the tactics to reshape data in different forms in R. 
+
+
+## Data Import
+
+We're going to be working with some data on unemployment rates by year from Statistics Canada. The data are contained in = a csv file in the `data` subfolder which is pretty straightforward to read.  But there are three problems: 
 
 1. There is a bunch of junk above the actual numbers we don't want. 
 2. there is an annoying row with `Percent` stuck below the headers 
